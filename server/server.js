@@ -4,6 +4,9 @@ const dotenv = require("dotenv");
 
 const connectDB = require("./config/db");
 const healthRoutes = require("./routes/healthRoutes");
+const authRoutes = require("./routes/authRoutes");
+const testRoutes = require("./routes/testRoutes");
+const studentRoutes = require("./routes/studentRoutes");
 
 dotenv.config();
 
@@ -20,6 +23,10 @@ app.use(express.json());
 
 // API routes
 app.use("/api/health", healthRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/test", testRoutes);
+app.use("/api/students", studentRoutes);
+
 
 // Start server
 app.listen(PORT, () => {
