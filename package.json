@@ -1,0 +1,40 @@
+{
+  "name": "alevate",
+  "version": "1.0.0",
+  "description": "A centralized MERN-based alumni-student mentorship, career guidance and job portal",
+  "main": "server/server.js",
+  "scripts": {
+    "build:client": "vite build",
+    "build": "vite build",
+    "start": "node server/server.js",
+    "dev": "vite build && node server/server.js",
+    "lint": "node -c server/server.js"
+  },
+  "dependencies": {
+    "@google/genai": "^2.24.0",
+    "axios": "^1.20.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "framer-motion": "^13.4.6",
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^1.48.0",
+    "mongoose": "^8.8.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-hook-form": "^7.89.0",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.18.4",
+    "recharts": "^3.10.1",
+    "remark-gfm": "^4.0.1",
+    "socket.io": "^4.8.4",
+    "socket.io-client": "^4.8.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^6.1.1",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.4"
+  }
+}

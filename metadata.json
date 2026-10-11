@@ -1,0 +1,8 @@
+{
+  "name": "ALEVATE",
+  "description": "An Integrated Alumni-Student Mentorship & Job Portal connecting students and alumni for mentorship, career guidance, jobs, referrals, real-time messaging, and AI career companion.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

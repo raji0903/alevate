@@ -1,0 +1,42 @@
+[
+  {
+    "role": "student",
+    "name": "Alex Rivera",
+    "email": "alex@university.edu",
+    "password": "Configured locally",
+    "status": "active",
+    "description": "Student account with instant access to explore mentors, request 1-on-1 sessions, and apply for jobs."
+  },
+  {
+    "role": "alumni",
+    "name": "Priya Sharma",
+    "email": "priya.sharma@google.com",
+    "password": "Configured locally",
+    "status": "approved",
+    "company": "Google",
+    "jobTitle": "Senior Software Engineer",
+    "experienceYears": 6,
+    "skills": ["System Design", "Go", "Distributed Systems", "Kubernetes"],
+    "description": "Verified alumni mentor authorized to mentor students, schedule sessions, and post jobs."
+  },
+  {
+    "role": "alumni_pending",
+    "name": "Devon Miller",
+    "email": "devon.miller@databricks.com",
+    "password": "Configured locally",
+    "status": "pending_review",
+    "company": "Databricks",
+    "jobTitle": "Staff Systems Engineer",
+    "experienceYears": 4,
+    "skills": ["Spark", "Scala", "Lakehouse Architecture", "Distributed Computing"],
+    "description": "Pending alumni applicant awaiting administrator verification of industry experience and skills."
+  },
+  {
+    "role": "admin",
+    "name": "Alevate Admin",
+    "email": "admin@alevate.edu",
+    "password": "Configured locally",
+    "status": "admin",
+    "description": "Administrator account with authority to evaluate alumni applications and grant mentor privileges."
+  }
+]
