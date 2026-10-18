@@ -1,3 +1,4 @@
+
 import React, {
   createContext,
   useContext,
@@ -25,50 +26,25 @@ export const AuthProvider = ({ children }) => {
 
   const [loading, setLoading] = useState(true);
 
-  // ============================================================
-  // GOOGLE / GITHUB OAUTH CALLBACK
-  // ============================================================
-
+  // Handle Google and GitHub OAuth callbacks
   useEffect(() => {
     const handleOAuthCallback = () => {
       const params = new URLSearchParams(
         window.location.search
       );
 
-      // --------------------------------------------------------
-      // GOOGLE
-      // --------------------------------------------------------
+      const googleToken = params.get('google_token');
+      const googleUser = params.get('google_user');
+      const googleError = params.get('google_error');
 
-      const googleToken =
-        params.get('google_token');
+      const githubToken = params.get('github_token');
+      const githubUser = params.get('github_user');
+      const githubError = params.get('github_error');
 
-      const googleUser =
-        params.get('google_user');
-
-      const googleError =
-        params.get('google_error');
-
-      // --------------------------------------------------------
-      // GITHUB
-      // --------------------------------------------------------
-
-      const githubToken =
-        params.get('github_token');
-
-      const githubUser =
-        params.get('github_user');
-
-      const githubError =
-        params.get('github_error');
-
-      // --------------------------------------------------------
-      // GOOGLE ERROR
-      // --------------------------------------------------------
-
-      if (googleError) {
+      if (googleError || githubError) {
         console.error(
-          'Google authentication failed:',
-          googleError
+          'Social authentication failed:',
+          googleError || githubError
         );
 
         window.history.replaceState(
@@ -80,40 +56,38 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      // --------------------------------------------------------
-      // GITHUB ERROR
-      // --------------------------------------------------------
+      const processOAuth = (oauthToken, oauthUser) => {
+        if (!oauthToken || !oauthUser) {
+          return false;
+        }
 
-      if (githubError) {
-        console.error(
-          'GitHub authentication failed:',
-          githubError
-        );
-
-        window.history.replaceState(
-          {},
-          document.title,
-          window.location.pathname
-        );
-
-        return;
-      }
-
-      // --------------------------------------------------------
-      // GOOGLE SUCCESS
-      // --------------------------------------------------------
-
-      if (googleToken && googleUser) {
         try {
-          const parsedUser =
-            JSON.parse(googleUser);
+          const parsedUser = JSON.parse(oauthUser);
 
-          setToken(googleToken);
+          // Never establish a session for unapproved alumni.
+          if (
+            parsedUser.role === 'alumni' &&
+            parsedUser.isVerified !== true
+          ) {
+            window.history.replaceState(
+              {},
+              document.title,
+              window.location.pathname
+            );
+
+            alert(
+              'Your alumni registration is awaiting administrator approval.'
+            );
+
+            return true;
+          }
+
+          setToken(oauthToken);
           setUser(parsedUser);
 
           localStorage.setItem(
             'alevate_token',
-            googleToken
+            oauthToken
           );
 
           localStorage.setItem(
@@ -128,93 +102,35 @@ export const AuthProvider = ({ children }) => {
           );
 
           if (parsedUser.role === 'alumni') {
-            window.location.replace(
-              '/alumni/dashboard'
-            );
-          } else if (
-            parsedUser.role === 'admin'
-          ) {
-            window.location.replace(
-              '/admin/dashboard'
-            );
+            window.location.replace('/alumni/dashboard');
+          } else if (parsedUser.role === 'admin') {
+            window.location.replace('/admin/dashboard');
           } else {
-            window.location.replace(
-              '/student/dashboard'
-            );
+            window.location.replace('/student/dashboard');
           }
 
-          return;
-
+          return true;
         } catch (error) {
           console.error(
-            'Unable to process Google login:',
+            'Unable to process social login:',
             error
           );
+
+          return true;
         }
+      };
+
+      if (processOAuth(googleToken, googleUser)) {
+        return;
       }
 
-      // --------------------------------------------------------
-      // GITHUB SUCCESS
-      // --------------------------------------------------------
-
-      if (githubToken && githubUser) {
-        try {
-          const parsedUser =
-            JSON.parse(githubUser);
-
-          setToken(githubToken);
-          setUser(parsedUser);
-
-          localStorage.setItem(
-            'alevate_token',
-            githubToken
-          );
-
-          localStorage.setItem(
-            'alevate_user',
-            JSON.stringify(parsedUser)
-          );
-
-          // Remove OAuth information from URL
-          window.history.replaceState(
-            {},
-            document.title,
-            window.location.pathname
-          );
-
-          // Redirect according to role
-          if (parsedUser.role === 'alumni') {
-            window.location.replace(
-              '/alumni/dashboard'
-            );
-          } else if (
-            parsedUser.role === 'admin'
-          ) {
-            window.location.replace(
-              '/admin/dashboard'
-            );
-          } else {
-            window.location.replace(
-              '/student/dashboard'
-            );
-          }
-
-        } catch (error) {
-          console.error(
-            'Unable to process GitHub login:',
-            error
-          );
-        }
-      }
+      processOAuth(githubToken, githubUser);
     };
 
     handleOAuthCallback();
   }, []);
 
-  // ============================================================
-  // VERIFY EXISTING USER
-  // ============================================================
-
+  // Verify an existing session
   useEffect(() => {
     const verifyUser = async () => {
       if (token) {
@@ -240,8 +156,26 @@ export const AuthProvider = ({ children }) => {
               role:
                 res.user.role ||
                 user?.role ||
-                'student'
+                'student',
+
+              isVerified:
+                res.user.isVerified ??
+                user?.isVerified
             };
+
+            // Clear any session that belongs to unapproved alumni.
+            if (
+              updated.role === 'alumni' &&
+              updated.isVerified !== true
+            ) {
+              setToken(null);
+              setUser(null);
+
+              localStorage.removeItem('alevate_token');
+              localStorage.removeItem('alevate_user');
+
+              return;
+            }
 
             setUser(updated);
 
@@ -250,8 +184,18 @@ export const AuthProvider = ({ children }) => {
               JSON.stringify(updated)
             );
           }
-        } catch {
-          // Keep existing local session.
+        } catch (error) {
+          console.error(
+            'Session verification failed:',
+            error
+          );
+
+          // Do not keep a session if the server cannot verify it.
+          setToken(null);
+          setUser(null);
+
+          localStorage.removeItem('alevate_token');
+          localStorage.removeItem('alevate_user');
         }
       }
 
@@ -261,23 +205,23 @@ export const AuthProvider = ({ children }) => {
     verifyUser();
   }, [token]);
 
-  // ============================================================
-  // NORMAL EMAIL/PASSWORD LOGIN
-  // ============================================================
+  // Email/password login
+  const login = async (email, password) => {
+    const res = await api.post('/auth/login', {
+      email,
+      password
+    });
 
-  const login = async (
-    email,
-    password
-  ) => {
-    const res = await api.post(
-      '/auth/login',
-      {
-        email,
-        password
+    if (res.token && res.user) {
+      if (
+        res.user.role === 'alumni' &&
+        res.user.isVerified !== true
+      ) {
+        throw new Error(
+          'Your alumni registration is awaiting administrator approval.'
+        );
       }
-    );
 
-    if (res.token) {
       setToken(res.token);
       setUser(res.user);
 
@@ -295,109 +239,91 @@ export const AuthProvider = ({ children }) => {
     return res;
   };
 
-  // ============================================================
-  // REGISTER
-  // ============================================================
-
+  // Registration
   const register = async (userData) => {
     const res = await api.post(
       '/auth/register',
       userData
     );
 
-    if (res.user) {
-      return await login(
-        userData.email,
-        userData.password
+    // Alumni must wait for approval. Do not call login().
+    if (userData.role === 'alumni') {
+      return res;
+    }
+
+    // Students can use the token returned by registration.
+    if (res.token && res.user) {
+      setToken(res.token);
+      setUser(res.user);
+
+      localStorage.setItem(
+        'alevate_token',
+        res.token
+      );
+
+      localStorage.setItem(
+        'alevate_user',
+        JSON.stringify(res.user)
       );
     }
 
     return res;
   };
 
-  // ============================================================
-  // GOOGLE LOGIN
-  // ============================================================
-
+  // Google login
   const loginWithGoogle = () => {
-    window.location.href =
-      '/api/auth/google';
+    window.location.href = '/api/auth/google';
   };
 
-  // ============================================================
-  // GITHUB LOGIN
-  // ============================================================
-
+  // GitHub login
   const loginWithGithub = () => {
-    window.location.href =
-      '/api/auth/github';
+    window.location.href = '/api/auth/github';
   };
 
-  // ============================================================
-  // QUICK LOGIN
-  // ============================================================
-
+  // Demo quick login
   const quickLogin = async (role) => {
-    let email =
-      'alex@university.edu';
+    let email = 'alex@university.edu';
 
     if (role === 'alumni') {
-      email =
-        'priya.sharma@google.com';
+      email = 'priya.sharma@google.com';
     }
 
     if (role === 'admin') {
-      email =
-        'admin@alevate.edu';
+      email = 'admin@alevate.edu';
     }
 
     try {
-      return await login(
-        email,
-        'password123'
-      );
+      return await login(email, 'password123');
+    } catch (error) {
+      // Do not automatically register a demo alumni account.
+      if (role === 'alumni') {
+        throw error;
+      }
 
-    } catch {
-      const name =
-        role === 'alumni'
-          ? 'Priya Sharma'
-          : role === 'admin'
-            ? 'Alevate Admin'
-            : 'Alex Rivera';
+      if (role === 'admin') {
+        throw error;
+      }
 
       return await register({
-        name,
+        name: 'Alex Rivera',
         email,
         password: 'password123',
-        role
+        role: 'student'
       });
     }
   };
 
-  // ============================================================
-  // LOGOUT
-  // ============================================================
-
+  // Logout
   const logout = () => {
     setToken(null);
     setUser(null);
 
-    localStorage.removeItem(
-      'alevate_token'
-    );
-
-    localStorage.removeItem(
-      'alevate_user'
-    );
+    localStorage.removeItem('alevate_token');
+    localStorage.removeItem('alevate_user');
   };
 
-  // ============================================================
-  // UPDATE PROFILE
-  // ============================================================
-
-  const updateUserProfile = (
-    updatedData
-  ) => {
+  // Update profile
+  const updateUserProfile = (updatedData) => {
     const updated = {
       ...user,
       ...updatedData
@@ -417,18 +343,13 @@ export const AuthProvider = ({ children }) => {
         user,
         token,
         loading,
-
         login,
         register,
-
         loginWithGoogle,
         loginWithGithub,
-
         quickLogin,
-
         logout,
         updateUserProfile,
-
         isAuthenticated: !!token
       }}
     >
@@ -438,8 +359,7 @@ export const AuthProvider = ({ children }) => {
 };
 
 export const useAuth = () => {
-  const context =
-    useContext(AuthContext);
+  const context = useContext(AuthContext);
 
   if (!context) {
     throw new Error(

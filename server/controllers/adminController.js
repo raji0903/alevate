@@ -1,3 +1,4 @@
+
 const User = require("../models/User");
 const AlumniProfile = require("../models/AlumniProfile");
 const StudentProfile = require("../models/StudentProfile");
@@ -8,12 +9,23 @@ const MentorshipRequest = require("../models/MentorshipRequest");
 // Get comprehensive platform analytics
 const getPlatformMetrics = async (req, res) => {
     try {
-        const studentCount = await User.countDocuments({ role: "student" });
-        const alumniCount = await User.countDocuments({ role: "alumni" });
-        const jobCount = await Job.countDocuments();
-        const sessionCount = await MentorshipSession.countDocuments();
+        const [
+            studentCount,
+            alumniCount,
+            jobCount,
+            sessionCount,
+            pendingAlumniCount
+        ] = await Promise.all([
+            User.countDocuments({ role: "student" }),
+            User.countDocuments({ role: "alumni" }),
+            Job.countDocuments(),
+            MentorshipSession.countDocuments(),
+            User.countDocuments({
+                role: "alumni",
+                isVerified: false
+            })
+        ]);
 
-        // Chart data: Monthly growth
         const userGrowthData = [
             { month: "Apr", students: 120, alumni: 45 },
             { month: "May", students: 210, alumni: 78 },
@@ -23,7 +35,6 @@ const getPlatformMetrics = async (req, res) => {
             { month: "Sep", students: 920, alumni: 310 }
         ];
 
-        // Chart data: Mentorship sessions by week
         const mentorshipActivityData = [
             { week: "W1", requested: 42, completed: 35 },
             { week: "W2", requested: 58, completed: 48 },
@@ -31,7 +42,6 @@ const getPlatformMetrics = async (req, res) => {
             { week: "W4", requested: 91, completed: 82 }
         ];
 
-        // Chart data: Industry distribution
         const industryDistribution = [
             { name: "Cloud & Distributed", count: 42 },
             { name: "Fintech & Payments", count: 28 },
@@ -40,7 +50,7 @@ const getPlatformMetrics = async (req, res) => {
             { name: "Cybersecurity", count: 15 }
         ];
 
-        res.json({
+        return res.json({
             success: true,
             stats: {
                 totalStudents: Math.max(studentCount, 920),
@@ -48,84 +58,199 @@ const getPlatformMetrics = async (req, res) => {
                 totalJobs: Math.max(jobCount, 48),
                 totalSessions: Math.max(sessionCount, 229),
                 activeReferrals: 87,
-                verificationPending: 4
+                verificationPending: pendingAlumniCount
             },
             userGrowthData,
             mentorshipActivityData,
             industryDistribution
         });
     } catch (err) {
-        res.status(500).json({ success: false, message: "Failed to fetch metrics", error: err.message });
+        console.error("Admin metrics error:", err);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch metrics"
+        });
     }
 };
 
 // Get all users for admin management
 const getAllUsers = async (req, res) => {
     try {
-        const { role, search } = req.query;
-        let query = {};
-        if (role && role !== "All") query.role = role;
+        const role = req.query.role;
+        const search = (req.query.search || "").trim().toLowerCase();
 
-        let users = await User.find(query);
+        const query = {};
 
-        if (search) {
-            const s = search.toLowerCase();
-            users = users.filter(u => u.name.toLowerCase().includes(s) || u.email.toLowerCase().includes(s));
+        // "All" must mean all roles, not a literal role name.
+        if (
+            role &&
+            role.toLowerCase() !== "all" &&
+            ["student", "alumni", "admin"].includes(role.toLowerCase())
+        ) {
+            query.role = role.toLowerCase();
         }
 
-        // Attach full profile details (experience, skills, company, job title, bio)
-        const enrichedUsers = await Promise.all(users.map(async (u) => {
-            const uId = u._id || u.id;
-            let profile = null;
-            if (u.role === "alumni") {
-                profile = await AlumniProfile.findOne({ user: uId });
-            } else if (u.role === "student") {
-                profile = await StudentProfile.findOne({ user: uId });
-            }
-            return {
-                ...u,
-                profile: profile ? {
-                    company: profile.company,
-                    jobTitle: profile.jobTitle,
-                    experience: profile.experience,
-                    skills: profile.skills || [],
-                    bio: profile.bio,
-                    industry: profile.industry
-                } : null
-            };
-        }));
+        const users = await User.find(query).lean();
 
-        res.json({ success: true, count: enrichedUsers.length, users: enrichedUsers });
+        const filteredUsers = users.filter((user) => {
+            if (!search) return true;
+
+            return (
+                (user.name || "").toLowerCase().includes(search) ||
+                (user.email || "").toLowerCase().includes(search)
+            );
+        });
+
+        const enrichedUsers = await Promise.all(
+            filteredUsers.map(async (user) => {
+                let profile = null;
+
+                if (user.role === "alumni") {
+                    profile = await AlumniProfile.findOne({
+                        user: user._id
+                    }).lean();
+                } else if (user.role === "student") {
+                    profile = await StudentProfile.findOne({
+                        user: user._id
+                    }).lean();
+                }
+
+                return {
+                    ...user,
+                    id: String(user._id),
+                    isVerified:
+                        user.isVerified !== undefined
+                            ? user.isVerified
+                            : user.role !== "alumni",
+                    isActive: user.isActive !== false,
+                    profile: profile
+                        ? {
+                              company: profile.company || "",
+                              jobTitle: profile.jobTitle || "",
+                              experience: profile.experience || 0,
+                              skills: profile.skills || [],
+                              bio: profile.bio || "",
+                              industry: profile.industry || ""
+                          }
+                        : null
+                };
+            })
+        );
+
+        return res.json({
+            success: true,
+            count: enrichedUsers.length,
+            users: enrichedUsers
+        });
     } catch (err) {
-        res.status(500).json({ success: false, message: "Failed to fetch users", error: err.message });
+        console.error("Admin get users error:", err);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch users"
+        });
     }
 };
 
-// Verify an alumni profile
+// Approve or revoke alumni mentor verification
 const verifyAlumni = async (req, res) => {
     try {
         const { userId, isVerified } = req.body;
-        const user = await User.findByIdAndUpdate(userId, {
-            isVerified: isVerified !== undefined ? isVerified : true
-        });
 
-        res.json({ success: true, message: `Alumni verification status updated to ${isVerified}`, user });
+        if (!userId || typeof isVerified !== "boolean") {
+            return res.status(400).json({
+                success: false,
+                message: "A valid userId and isVerified boolean are required"
+            });
+        }
+
+        const user = await User.findById(userId);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        if (user.role !== "alumni") {
+            return res.status(400).json({
+                success: false,
+                message: "Only alumni accounts can be verified"
+            });
+        }
+
+        user.isVerified = isVerified;
+        await user.save();
+
+        return res.json({
+            success: true,
+            message: isVerified
+                ? "Alumni approved successfully"
+                : "Alumni verification revoked",
+            user: {
+                id: String(user._id),
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                isVerified: user.isVerified
+            }
+        });
     } catch (err) {
-        res.status(500).json({ success: false, message: "Verification failed", error: err.message });
+        console.error("Admin alumni verification error:", err);
+
+        return res.status(500).json({
+            success: false,
+            message: "Verification failed"
+        });
     }
 };
 
-// Toggle user active status
+// Activate or deactivate a user
 const toggleUserStatus = async (req, res) => {
     try {
         const { userId, isActive } = req.body;
-        const user = await User.findByIdAndUpdate(userId, {
-            isActive: isActive !== undefined ? isActive : true
-        });
 
-        res.json({ success: true, message: "User status updated", user });
+        if (!userId || typeof isActive !== "boolean") {
+            return res.status(400).json({
+                success: false,
+                message: "A valid userId and isActive boolean are required"
+            });
+        }
+
+        const user = await User.findById(userId);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        user.isActive = isActive;
+        await user.save();
+
+        return res.json({
+            success: true,
+            message: isActive
+                ? "User activated successfully"
+                : "User deactivated successfully",
+            user: {
+                id: String(user._id),
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                isActive: user.isActive
+            }
+        });
     } catch (err) {
-        res.status(500).json({ success: false, message: "Failed to update user status", error: err.message });
+        console.error("Admin toggle user status error:", err);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to update user status"
+        });
     }
 };
 
