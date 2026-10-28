@@ -10,6 +10,11 @@ import api from '../api/client';
 
 const AuthContext = createContext(null);
 
+const API_URL = (
+  import.meta.env.VITE_API_URL ||
+  'https://alevate-alumni-student.onrender.com'
+).replace(/\/+$/, '');
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
     try {
@@ -26,12 +31,9 @@ export const AuthProvider = ({ children }) => {
 
   const [loading, setLoading] = useState(true);
 
-  // Handle Google and GitHub OAuth callbacks
   useEffect(() => {
     const handleOAuthCallback = () => {
-      const params = new URLSearchParams(
-        window.location.search
-      );
+      const params = new URLSearchParams(window.location.search);
 
       const googleToken = params.get('google_token');
       const googleUser = params.get('google_user');
@@ -64,7 +66,6 @@ export const AuthProvider = ({ children }) => {
         try {
           const parsedUser = JSON.parse(oauthUser);
 
-          // Never establish a session for unapproved alumni.
           if (
             parsedUser.role === 'alumni' &&
             parsedUser.isVerified !== true
@@ -85,11 +86,7 @@ export const AuthProvider = ({ children }) => {
           setToken(oauthToken);
           setUser(parsedUser);
 
-          localStorage.setItem(
-            'alevate_token',
-            oauthToken
-          );
-
+          localStorage.setItem('alevate_token', oauthToken);
           localStorage.setItem(
             'alevate_user',
             JSON.stringify(parsedUser)
@@ -130,7 +127,6 @@ export const AuthProvider = ({ children }) => {
     handleOAuthCallback();
   }, []);
 
-  // Verify an existing session
   useEffect(() => {
     const verifyUser = async () => {
       if (token) {
@@ -143,27 +139,22 @@ export const AuthProvider = ({ children }) => {
                 res.user.userId ||
                 res.user.id ||
                 user?.id,
-
               name:
                 res.user.name ||
                 user?.name ||
                 'Alex Rivera',
-
               email:
                 res.user.email ||
                 user?.email,
-
               role:
                 res.user.role ||
                 user?.role ||
                 'student',
-
               isVerified:
                 res.user.isVerified ??
                 user?.isVerified
             };
 
-            // Clear any session that belongs to unapproved alumni.
             if (
               updated.role === 'alumni' &&
               updated.isVerified !== true
@@ -190,7 +181,6 @@ export const AuthProvider = ({ children }) => {
             error
           );
 
-          // Do not keep a session if the server cannot verify it.
           setToken(null);
           setUser(null);
 
@@ -205,7 +195,6 @@ export const AuthProvider = ({ children }) => {
     verifyUser();
   }, [token]);
 
-  // Email/password login
   const login = async (email, password) => {
     const res = await api.post('/auth/login', {
       email,
@@ -225,11 +214,7 @@ export const AuthProvider = ({ children }) => {
       setToken(res.token);
       setUser(res.user);
 
-      localStorage.setItem(
-        'alevate_token',
-        res.token
-      );
-
+      localStorage.setItem('alevate_token', res.token);
       localStorage.setItem(
         'alevate_user',
         JSON.stringify(res.user)
@@ -239,28 +224,18 @@ export const AuthProvider = ({ children }) => {
     return res;
   };
 
-  // Registration
   const register = async (userData) => {
-    const res = await api.post(
-      '/auth/register',
-      userData
-    );
+    const res = await api.post('/auth/register', userData);
 
-    // Alumni must wait for approval. Do not call login().
     if (userData.role === 'alumni') {
       return res;
     }
 
-    // Students can use the token returned by registration.
     if (res.token && res.user) {
       setToken(res.token);
       setUser(res.user);
 
-      localStorage.setItem(
-        'alevate_token',
-        res.token
-      );
-
+      localStorage.setItem('alevate_token', res.token);
       localStorage.setItem(
         'alevate_user',
         JSON.stringify(res.user)
@@ -270,17 +245,14 @@ export const AuthProvider = ({ children }) => {
     return res;
   };
 
-  // Google login
   const loginWithGoogle = () => {
-    window.location.href = '/api/auth/google';
+    window.location.href = `${API_URL}/api/auth/google`;
   };
 
-  // GitHub login
   const loginWithGithub = () => {
-    window.location.href = '/api/auth/github';
+    window.location.href = `${API_URL}/api/auth/github`;
   };
 
-  // Demo quick login
   const quickLogin = async (role) => {
     let email = 'alex@university.edu';
 
@@ -295,12 +267,7 @@ export const AuthProvider = ({ children }) => {
     try {
       return await login(email, 'password123');
     } catch (error) {
-      // Do not automatically register a demo alumni account.
-      if (role === 'alumni') {
-        throw error;
-      }
-
-      if (role === 'admin') {
+      if (role === 'alumni' || role === 'admin') {
         throw error;
       }
 
@@ -313,7 +280,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Logout
   const logout = () => {
     setToken(null);
     setUser(null);
@@ -322,7 +288,6 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('alevate_user');
   };
 
-  // Update profile
   const updateUserProfile = (updatedData) => {
     const updated = {
       ...user,
