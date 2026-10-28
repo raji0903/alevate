@@ -6,7 +6,7 @@ const Job = require("../models/Job");
 // server.js loads dotenv before importing routes so the key is available here.
 const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 const aiClient = apiKey ? new GoogleGenAI({ apiKey }) : null;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
 const asText = (value) => (Array.isArray(value) ? value : []).filter(Boolean).map(String);
 const normalize = (value) => String(value || "").toLowerCase().trim();
@@ -53,8 +53,12 @@ const careerCompanionChat = async (req, res) => {
                 const response = await aiClient.models.generateContent({ model: GEMINI_MODEL, contents: prompt });
                 if (response.text) return res.json({ success: true, reply: response.text, provider: "gemini" });
             } catch (apiErr) {
-                console.warn("Gemini chat failed:", apiErr.message);
-            }
+    console.error("Gemini chat failed:", {
+        message: apiErr.message,
+        status: apiErr.status || apiErr.statusCode,
+        details: apiErr.error || null
+    });
+}
         }
 
         const q = String(message).toLowerCase();
