@@ -57,7 +57,7 @@ io.on("connection", (socket) => {
 });
 
 // Port configuration: AI Studio strictly requires port 3000
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";
 
 // Database
